@@ -158,7 +158,183 @@ Q2:为什么加了@localhost就会报错
 
 * 对GNGINX来说,它最开始就是用来做负载均衡服务器的,但是HAPorxy同样也可以完成目的
 
+____
+
+准备工作:
+
+```shell
+sudo apt install haproxy //下载haproxy
+下载需要的web文件 	//wget
+下载python的服务器框架
+sudo apt install python3-tronado
+```
 
 
 
+* 当我们运行`python3 service.py`时,将建立6个不同的web窗口,为了区分,我们让它显示不同的内容(仅仅是为了实验目的)
+* 浏览器`localhost:8080~8085`访问这些网页
 
+使用负载均衡器的目的是:如果我有大量的请求,那么就将这些请求平均分配以保证他们不会oveload
+
+
+
+**我们可以通过配置`/etc/haproxy/haproxy.cfg`来配置我们的负载均衡器**
+
+
+
+lab给我们提供了一个监听器,使用7001端口
+
+```shell
+listen stats
+  bind    0.0.0.0:7001
+  mode    http
+  stats   enable
+  stats   hide-version
+  stats   uri /stats
+```
+
+下面我将解释这些代码的意思
+
+* bind:表示使用缺省地址,目标端口为7001
+* mode:建立的是http链接
+* stats:这行启用了对服务的统计信息收集。这意味着服务将收集和提供各种统计数据和指标，如请求计数、响应时间等
+* uri/stats:请访问`localhost:7001/stats`
+
+## Part1
+
+**我需要做的**:
+
+1. 编辑前端(forntend)
+2. 编辑后端(backend)
+3. 设置7000端口为监听端口,它将返回负载均衡器分配的端口返回的内容
+
+
+
+**我的代码**:
+
+```shell
+#frontend
+frontend servers
+	bind 0.0.0.0:7000
+	default_backend servers
+#backend
+backend servers
+	balance roundrobin
+    cookie serverused insert indirect nocache
+	default-server check maxconn 20
+	server server1 0.0.0.0:8080 cookie server1
+	server server2 0.0.0.0:8081 cookie server2
+	server server3 0.0.0.0:8082 cookie server3
+	server server4 0.0.0.0:8083 cookie server4
+	server server5 0.0.0.0:8084 cookie server5
+	server server6 0.0.0.0:8085 cookie server6
+```
+
+_____
+
+**前端部分**
+
+____
+
+* bind 0.0.0.0:7000 :使用7000端口,本地ip
+* default_backend servers :使用名为server作为后端
+
+____
+
+**后端部分**
+
+_____
+
+* balance roundrobin:使用 roundrobin策略
+*  cookie serverused insert indirect nocache:表示使用cookie,并不做多研究
+* default-server check maxconn 20:设置后面设置的服务器默认都进行服务器检查,最大访问数量为20
+* server server1 0.0.0.0:8080 cookie server1:以此为例,设置server1**代理**0.0.0.0:8080,使用cookie
+
+下面是展示:
+
+7001/stats #
+
+![image-20231013120129628](./img/image-20231013120129628.png)
+
+可见,使用了check后,我设置的服务器代理,都能正常运作,显示为绿色
+
+当我的服务器端口关闭时,会显示红色
+
+
+
+7000 #
+
+展示最近有流过信息的端口的内容
+
+## Part2
+
+使用`http://localhost:7000/crash`来关闭某个服务器端口,它将按顺序关闭端口
+
+
+
+当然也可以使用`curl localhost:<port>/crash`来关闭指定端口
+
+
+
+Q1:当你刷新7001时,有什么发现?
+
+A:端口逐渐变红,即关闭了端口
+
+
+
+Q2:你使用了什么负载均衡算法?
+
+A:roundrobin
+
+
+
+Q3:你加入了什么配置代码?
+
+A:如上所示
+
+
+
+Q4:当你加入check时,你发现有什么变化?
+
+A:将显示服务器状态,绿色为正常运行,红色为关闭或故障
+
+
+
+Q5:当你crash一个工作时,7001发生了什么变化?
+
+A:端口逐个变红
+
+
+
+Q6:如果你关闭了所有的端口,http将返回什么信息?
+
+A:error:503,同时我的service终止了
+
+
+
+# 总结
+
+haproxy仅仅是一个所谓的代理,而非必要的工具
+
+即你不需要设置你的服务器代码,将代码放到这个工具上运行
+
+
+
+它所做的仅仅只是**代理端口**进行负载均衡
+
+
+
+在我的实验过程中,我发现了它的负载均衡算法:
+
+* 它似乎在少量请求时,会将所有的流量流过同一个端口,只使用一个端口来响应
+* 只有在流量很多的时候,才会使用其他端口相应
+* 因为7000端口始终返回同一个端口的内容,且每次启动返回内容都不同(应该是随即使用一个空闲端口)
+
+
+
+我遇到了一些问题:
+
+* 当我下载文件时,使用wget下载,但是我尝试了很多次发现下载内容有误,发现github上代码下载有他特定的方式.纠正错误后仍然未响应,原因是我没有进行`apt update`
+* 查阅文档时,发现很多东西我并不需要,其实可以跳过
+* 文档写的很全,基本上我代码没有太大问题,可喜可贺
+* 如果一个服务无法启动,在linux中我可以使用`systemctl status <servcie name>`来查看服务的状态以及报错原因,非常方便
