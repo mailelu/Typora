@@ -13,7 +13,7 @@
 1. 如何定位文件?
 
 ```c
-fseek(file, num, <###>);
+fseek(*file, num, <###>);
 //num表示偏移量
 ```
 
@@ -100,3 +100,4 @@ fread( *ptr, sizeof(), num, input)
 
 # project3
 
+在printf中 uin8_t用%u表示转义

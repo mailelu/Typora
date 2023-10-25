@@ -116,6 +116,8 @@ bye!
 
 ```
 
+注意 : " "表示字符串 ' '表示ASCLL码
+
 ___
 
 #使用 int main(int argc,string argv[])
